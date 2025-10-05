@@ -46,6 +46,12 @@ cd mikrotik-2fa
 
 ### 2. Instalación Automática (Recomendado)
 
+#### Para contenedores LXC Ubuntu:
+```bash
+sudo bash install_lxc.sh
+```
+
+#### Para instalación estándar:
 ```bash
 sudo bash install.sh
 ```
@@ -86,6 +92,73 @@ python3 app.py
 ```
 
 La aplicación creará automáticamente la base de datos SQLite en el primer arranque.
+
+## 🐳 Instalación en Contenedores LXC
+
+### Prerrequisitos LXC
+
+- Contenedor LXC con Ubuntu 20.04+ o 22.04+
+- Acceso root al contenedor
+- Conectividad de red entre LXC y Mikrotik
+- Al menos 512MB RAM y 2GB espacio en disco
+
+### Instalación Rápida en LXC
+
+```bash
+# 1. Clonar el proyecto en el contenedor LXC
+git clone <tu-repositorio> mikrotik-2fa
+cd mikrotik-2fa
+
+# 2. Instalación automática optimizada para LXC
+sudo bash install_lxc.sh
+
+# 3. Iniciar servicios
+sudo systemctl start freeradius mikrotik-2fa
+
+# 4. Verificar instalación
+bash start_lxc.sh status
+```
+
+### Gestión en LXC
+
+```bash
+# Ver estado de servicios
+bash start_lxc.sh status
+
+# Iniciar servicios
+bash start_lxc.sh start
+
+# Ver logs
+bash start_lxc.sh logs
+
+# Modo desarrollo
+bash start_lxc.sh dev
+
+# Información de red
+bash start_lxc.sh network
+```
+
+### Configuración de Red LXC
+
+El script detectará automáticamente la IP del contenedor. Para configurar Mikrotik:
+
+1. **Obtener IP del contenedor:**
+   ```bash
+   bash start_lxc.sh network
+   ```
+
+2. **Configurar Mikrotik:**
+   - Servidor RADIUS: `IP_DEL_CONTENEDOR`
+   - Secreto: `radius_secret_2fa_mikrotik`
+   - Importar: `mikrotik_config_lxc.rsc`
+
+### Ventajas de LXC
+
+- ✅ **Aislamiento**: Sistema completamente aislado
+- ✅ **Portabilidad**: Fácil migración entre hosts
+- ✅ **Recursos**: Uso eficiente de recursos
+- ✅ **Seguridad**: Entorno controlado
+- ✅ **Backup**: Backup completo del contenedor
 
 ### 5. Instalar y Configurar FreeRADIUS
 
@@ -189,23 +262,26 @@ Los usuarios pueden conectarse usando:
 
 ```
 mikrotik-2fa/
-├── app.py                 # Aplicación principal Flask
-├── requirements.txt       # Dependencias Python
-├── create_admin.py        # Script para crear usuario administrador
-├── install.sh            # Script de instalación automatizada
-├── templates/            # Plantillas HTML
+├── app.py                    # Aplicación principal Flask
+├── requirements.txt          # Dependencias Python
+├── create_admin.py           # Script para crear usuario administrador
+├── install.sh               # Script de instalación automatizada
+├── install_lxc.sh           # Script de instalación para LXC Ubuntu
+├── start_lxc.sh             # Script de gestión para LXC
+├── templates/               # Plantillas HTML
 │   ├── base.html
 │   ├── login.html
 │   ├── dashboard.html
 │   ├── create_user.html
 │   └── qr_code.html
-├── freeradius/          # Configuraciones FreeRADIUS
-│   ├── radius_auth.py   # Script de autenticación
+├── freeradius/             # Configuraciones FreeRADIUS
+│   ├── radius_auth.py      # Script de autenticación
 │   ├── sites-available/default
 │   └── modules/python
-├── mikrotik_config.rsc  # Configuración Mikrotik
-├── env_example.txt      # Variables de entorno ejemplo
-└── README.md           # Este archivo
+├── mikrotik_config.rsc     # Configuración Mikrotik (estándar)
+├── mikrotik_config_lxc.rsc # Configuración Mikrotik (LXC)
+├── env_example.txt         # Variables de entorno ejemplo
+└── README.md              # Este archivo
 ```
 
 ## API Endpoints
