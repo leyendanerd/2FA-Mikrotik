@@ -1,0 +1,27 @@
+# Python module configuration for FreeRADIUS
+# Place this file in /etc/freeradius/3.0/mods-available/python
+
+python {
+    module = /Users/juliomontero/Desktop/2FA\ Mikrotik/freeradius/radius_auth.py
+    
+    # Function to call for authorization
+    func_authorize = authorize
+    
+    # Function to call for authentication
+    func_authenticate = authenticate
+    
+    # Function to call for pre-accounting
+    func_preacct = preacct
+    
+    # Function to call for accounting
+    func_accounting = accounting
+    
+    # Function to call for post-auth
+    func_post_auth = post_auth
+    
+    # Function to call for session management
+    func_recv_coa = recv_coa
+    
+    # Function to call for disconnect requests
+    func_send_coa = send_coa
+}

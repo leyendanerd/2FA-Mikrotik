@@ -1,0 +1,173 @@
+# FreeRADIUS configuration for Mikrotik 2FA
+# Place this file in /etc/freeradius/3.0/sites-available/default
+
+# Listen on all interfaces
+listen {
+    type = auth
+    ipaddr = *
+    port = 0
+    limit {
+        max_connections = 16
+        lifetime = 0
+        idle_timeout = 30
+    }
+}
+
+listen {
+    type = acct
+    ipaddr = *
+    port = 0
+    limit {
+        max_connections = 16
+        lifetime = 0
+        idle_timeout = 30
+    }
+}
+
+listen {
+    type = auth
+    ipv6addr = ::
+    port = 0
+    limit {
+        max_connections = 16
+        lifetime = 0
+        idle_timeout = 30
+    }
+}
+
+listen {
+    type = acct
+    ipv6addr = ::
+    port = 0
+    limit {
+        max_connections = 16
+        lifetime = 0
+        idle_timeout = 30
+    }
+}
+
+# Authorize section
+authorize {
+    # Pre-process the incoming packets
+    preprocess
+    
+    # Filter dangerous characters
+    filter_username
+    
+    # Handle different authentication types
+    chap
+    mschap
+    digest
+    suffix
+    eap {
+        ok = return
+    }
+    
+    # Files module for static users (fallback)
+    files
+    
+    # Custom Python authentication
+    python
+    
+    # SQL module for user data
+    sql
+    
+    # Expiration and logintime
+    expiration
+    logintime
+    
+    # Pap module
+    pap
+    
+    # If all else fails, reject
+    if (notfound) {
+        reject
+    }
+}
+
+# Authenticate section
+authenticate {
+    # Handle CHAP authentication
+    Auth-Type PAP {
+        pap
+    }
+    
+    # Handle MS-CHAP authentication
+    Auth-Type CHAP {
+        chap
+    }
+    
+    # Handle MS-CHAPv2 authentication
+    Auth-Type MS-CHAP {
+        mschap
+    }
+    
+    # EAP authentication
+    eap
+}
+
+# Preacct section
+preacct {
+    preprocess
+    acct_unique
+    suffix
+    files
+}
+
+# Accounting section
+accounting {
+    # Update accounting records
+    detail
+    
+    # SQL accounting
+    sql
+    
+    # Uncomment if you want to log accounting data
+    # exec
+    
+    # Attribute filters
+    attr_filter.accounting_response
+    
+    # Update session data
+    update {
+        output = "%{tolower:type.%{Acct-Status-Type}}"
+    }
+}
+
+# Session section
+session {
+    radutmp
+    sql
+}
+
+# Post-Auth section
+post-auth {
+    # Update accounting records
+    update {
+        output = "%{tolower:type.%{Acct-Status-Type}}"
+    }
+    
+    # SQL post-auth
+    sql
+    
+    # Remove reply message if authentication failed
+    if (not success) {
+        remove_reply_message_if_eap
+    }
+    
+    # Post-Auth-Type REJECT
+    Post-Auth-Type REJECT {
+        attr_filter.access_reject
+        eap
+        remove_reply_message_if_eap
+    }
+}
+
+# Pre-proxy section
+pre-proxy {
+}
+
+# Post-Proxy section
+post-proxy {
+    eap
+}

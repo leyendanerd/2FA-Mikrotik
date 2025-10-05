@@ -1,0 +1,17 @@
+# Configuración del entorno para Mikrotik 2FA
+
+# Clave secreta para Flask (generar una nueva para producción)
+SECRET_KEY=tu-clave-secreta-muy-segura-cambiar-en-produccion
+
+# URL de la API Flask para FreeRADIUS
+FLASK_API_URL=http://localhost:5000/api/auth
+
+# Configuración de base de datos
+DATABASE_URL=sqlite:///users.db
+
+# Configuración de FreeRADIUS (opcional)
+RADIUS_SECRET=secreto_radius_cambiarlo
+RADIUS_PORT=1812
+
+# Configuración de logging
+LOG_LEVEL=INFO
