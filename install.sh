@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script de instalación para Mikrotik 2FA con FreeRADIUS
+# Script de instalación simplificado para Mikrotik 2FA
 # Ejecutar con: sudo bash install.sh
 
 set -e
@@ -15,56 +15,48 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Detectar distribución de Linux
-if [ -f /etc/debian_version ]; then
-    DISTRO="debian"
-    PKG_MANAGER="apt"
-elif [ -f /etc/redhat-release ]; then
-    DISTRO="redhat"
-    PKG_MANAGER="yum"
-elif [ -f /etc/arch-release ]; then
-    DISTRO="arch"
-    PKG_MANAGER="pacman"
-else
-    echo "Distribución no soportada"
-    exit 1
-fi
-
-echo "Distribución detectada: $DISTRO"
+# Obtener directorio del script
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+echo "Directorio del proyecto: $SCRIPT_DIR"
 
 # Función para instalar paquetes
 install_packages() {
-    if [ "$PKG_MANAGER" = "apt" ]; then
+    echo "Instalando paquetes necesarios..."
+    
+    if command -v apt >/dev/null 2>&1; then
         apt update
         apt install -y python3 python3-pip python3-venv freeradius freeradius-utils git curl
-    elif [ "$PKG_MANAGER" = "yum" ]; then
+    elif command -v yum >/dev/null 2>&1; then
         yum update -y
         yum install -y python3 python3-pip freeradius freeradius-utils git curl
-    elif [ "$PKG_MANAGER" = "pacman" ]; then
+    elif command -v pacman >/dev/null 2>&1; then
         pacman -Syu --noconfirm python python-pip freeradius git curl
+    else
+        echo "Gestor de paquetes no soportado. Instala manualmente:"
+        echo "  - Python 3.8+"
+        echo "  - pip"
+        echo "  - FreeRADIUS 3.x"
+        exit 1
     fi
 }
 
-# Función para configurar Python virtual environment
-setup_python_env() {
-    echo "Configurando entorno Python..."
+# Función para configurar Python
+setup_python() {
+    echo "Configurando Python..."
     
-    # Crear directorio para la aplicación
-    mkdir -p /opt/mikrotik-2fa
-    cd /opt/mikrotik-2fa
+    cd "$SCRIPT_DIR"
     
-    # Copiar archivos del proyecto (asumiendo que se ejecuta desde el directorio del proyecto)
-    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    cp -r "$SCRIPT_DIR"/* /opt/mikrotik-2fa/
+    # Crear entorno virtual si no existe
+    if [ ! -d "venv" ]; then
+        python3 -m venv venv
+    fi
     
-    # Crear entorno virtual
-    python3 -m venv venv
+    # Activar entorno virtual e instalar dependencias
     source venv/bin/activate
-    
-    # Instalar dependencias
+    pip install --upgrade pip
     pip install -r requirements.txt
     
-    echo "Entorno Python configurado correctamente"
+    echo "Python configurado correctamente"
 }
 
 # Función para configurar FreeRADIUS
@@ -82,9 +74,9 @@ setup_freeradius() {
     ln -sf /etc/freeradius/3.0/mods-available/python /etc/freeradius/3.0/mods-enabled/
     
     # Hacer ejecutable el script de autenticación
-    chmod +x /opt/mikrotik-2fa/freeradius/radius_auth.py
+    chmod +x "$SCRIPT_DIR/freeradius/radius_auth.py"
     
-    # Configurar cliente RADIUS (necesita edición manual)
+    # Configurar cliente RADIUS
     echo "" >> /etc/freeradius/3.0/clients.conf
     echo "# Cliente Mikrotik para 2FA" >> /etc/freeradius/3.0/clients.conf
     echo "client mikrotik {" >> /etc/freeradius/3.0/clients.conf
@@ -95,7 +87,7 @@ setup_freeradius() {
     
     # Cambiar propietario de archivos
     chown -R freerad:freerad /etc/freeradius/3.0/
-    chown -R freerad:freerad /opt/mikrotik-2fa/
+    chown -R freerad:freerad "$SCRIPT_DIR/"
     
     # Habilitar y iniciar FreeRADIUS
     systemctl enable freeradius
@@ -104,34 +96,32 @@ setup_freeradius() {
     echo "FreeRADIUS configurado correctamente"
 }
 
-# Función para crear servicio systemd
-create_systemd_service() {
-    echo "Creando servicio systemd..."
+# Función para crear usuario admin
+create_admin() {
+    echo "Creando usuario administrador..."
     
-    cat > /etc/systemd/system/mikrotik-2fa.service << EOF
-[Unit]
-Description=Mikrotik 2FA Dashboard
-After=network.target
-
-[Service]
-Type=simple
-User=freerad
-Group=freerad
-WorkingDirectory=/opt/mikrotik-2fa
-Environment=PATH=/opt/mikrotik-2fa/venv/bin
-ExecStart=/opt/mikrotik-2fa/venv/bin/python app.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-    systemctl enable mikrotik-2fa
-    systemctl start mikrotik-2fa
+    cd "$SCRIPT_DIR"
+    source venv/bin/activate
     
-    echo "Servicio systemd creado correctamente"
+    python3 -c "
+import os
+os.environ['FLASK_APP'] = 'app.py'
+from app import app, db, User
+
+with app.app_context():
+    db.create_all()
+    admin = User.query.filter_by(username='admin').first()
+    if not admin:
+        admin = User(username='admin')
+        admin.set_password('admin123')
+        admin.generate_totp_secret()
+        admin.totp_enabled = False
+        db.session.add(admin)
+        db.session.commit()
+        print('Usuario admin creado con contraseña: admin123')
+    else:
+        print('Usuario admin ya existe')
+"
 }
 
 # Función para configurar firewall
@@ -139,20 +129,18 @@ configure_firewall() {
     echo "Configurando firewall..."
     
     if command -v ufw >/dev/null 2>&1; then
-        # Ubuntu/Debian con UFW
         ufw allow 5000/tcp
         ufw allow 1812/udp
         ufw allow 1813/udp
         echo "Reglas UFW agregadas"
     elif command -v firewall-cmd >/dev/null 2>&1; then
-        # CentOS/RHEL con firewalld
         firewall-cmd --permanent --add-port=5000/tcp
         firewall-cmd --permanent --add-port=1812/udp
         firewall-cmd --permanent --add-port=1813/udp
         firewall-cmd --reload
         echo "Reglas firewalld agregadas"
     else
-        echo "No se detectó firewall configurado. Configura manualmente:"
+        echo "No se detectó firewall. Configura manualmente:"
         echo "  Puerto 5000/tcp (Dashboard web)"
         echo "  Puerto 1812/udp (RADIUS auth)"
         echo "  Puerto 1813/udp (RADIUS accounting)"
@@ -161,21 +149,12 @@ configure_firewall() {
 
 # Función principal
 main() {
-    echo "Iniciando instalación..."
+    echo "Iniciando instalación desde: $SCRIPT_DIR"
     
-    # Instalar paquetes necesarios
     install_packages
-    
-    # Configurar entorno Python
-    setup_python_env
-    
-    # Configurar FreeRADIUS
+    setup_python
     setup_freeradius
-    
-    # Crear servicio systemd
-    create_systemd_service
-    
-    # Configurar firewall
+    create_admin
     configure_firewall
     
     echo ""
@@ -183,29 +162,21 @@ main() {
     echo "Instalación completada exitosamente!"
     echo "=========================================="
     echo ""
-    echo "Próximos pasos:"
-    echo "1. Configurar variables de entorno:"
-    echo "   nano /opt/mikrotik-2fa/.env"
+    echo "Para iniciar la aplicación:"
+    echo "  cd $SCRIPT_DIR"
+    echo "  source venv/bin/activate"
+    echo "  python app.py"
     echo ""
-    echo "2. Configurar el cliente RADIUS en Mikrotik:"
-    echo "   Editar /etc/freeradius/3.0/clients.conf"
-    echo "   Cambiar 'secreto_radius_cambiarlo' por tu secreto"
+    echo "Dashboard disponible en: http://localhost:5000"
+    echo "Usuario: admin"
+    echo "Contraseña: admin123"
     echo ""
-    echo "3. Acceder al dashboard:"
-    echo "   http://tu-servidor:5000"
-    echo ""
-    echo "4. Importar configuración en Mikrotik:"
-    echo "   /import mikrotik_config.rsc"
-    echo ""
-    echo "Servicios:"
-    echo "  - Dashboard web: systemctl status mikrotik-2fa"
-    echo "  - FreeRADIUS: systemctl status freeradius"
-    echo ""
-    echo "Logs:"
-    echo "  - Dashboard: journalctl -u mikrotik-2fa -f"
-    echo "  - FreeRADIUS: tail -f /var/log/freeradius/radius.log"
+    echo "Configuración adicional:"
+    echo "1. Editar /etc/freeradius/3.0/clients.conf"
+    echo "2. Cambiar 'secreto_radius_cambiarlo' por tu secreto"
+    echo "3. Importar mikrotik_config.rsc en tu Mikrotik"
     echo ""
 }
 
-# Ejecutar función principal
+# Ejecutar instalación
 main
